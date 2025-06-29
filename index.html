@@ -18,6 +18,7 @@
         .auth-btn{background:linear-gradient(45deg,#1e3c72,#2a5298);color:white;padding:15px 30px;border:none;border-radius:12px;cursor:pointer;font-size:16px;font-weight:600;width:100%;margin:10px 0;transition:transform 0.2s}
         .auth-btn:hover{transform:translateY(-2px)}
         .auth-btn:disabled{opacity:0.6;cursor:not-allowed}
+        .auth-btn.secondary{background:linear-gradient(45deg,#28a745,#20c997);margin-top:15px}
         .main-app{display:none;min-height:100vh}
         .header{background:white;padding:20px;border-radius:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 5px 15px rgba(0,0,0,0.1)}
         .user-info{display:flex;align-items:center;gap:15px}
@@ -59,9 +60,14 @@
         .success{background:#d4edda;color:#155724}
         .error{background:#f8d7da;color:#721c24}
         .warning{background:#fff3cd;color:#856404}
+        .info{background:#d1ecf1;color:#0c5460}
         .logout-btn{background:#dc3545;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600}
         .logout-btn:hover{background:#c82333}
         .hidden{display:none!important}
+        .auth-toggle{margin-top:20px;padding-top:20px;border-top:2px solid #f0f0f0}
+        .auth-toggle p{color:#666;margin-bottom:10px}
+        .auth-toggle button{background:none;border:none;color:#2a5298;cursor:pointer;font-weight:600;text-decoration:underline}
+        .security-id-display{background:linear-gradient(45deg,#28a745,#20c997);color:white;padding:10px 15px;border-radius:8px;margin:10px 0;font-weight:bold;font-size:1.1em}
         @media (max-width:768px){
             .container{padding:10px}
             .header{flex-direction:column;gap:15px;text-align:center}
@@ -75,27 +81,44 @@
 </head>
 <body>
     <div class="container">
+        <!-- Registration Section -->
+        <div id="registerSection" class="auth-container hidden">
+            <div class="security-icon">🛡️</div>
+            <h2 class="auth-title">Security Registration</h2>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" id="regWatchmanName" class="form-input" placeholder="Enter your full name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Contact Number</label>
+                <input type="tel" id="regContactNumber" class="form-input" placeholder="Enter your contact number">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email Address (Optional)</label>
+                <input type="email" id="regEmail" class="form-input" placeholder="Enter your email">
+            </div>
+            <button id="registerBtn" class="auth-btn" onclick="register()">Register as Security</button>
+            <div id="regMsg"></div>
+            <div class="auth-toggle">
+                <p>Already registered?</p>
+                <button onclick="showLogin()">Login Here</button>
+            </div>
+        </div>
+
         <!-- Login Section -->
-        <div id="authSection" class="auth-container">
+        <div id="loginSection" class="auth-container">
             <div class="security-icon">🛡️</div>
             <h2 class="auth-title">Security Portal</h2>
             <div class="form-group">
-                <label class="form-label">Watchman Name</label>
-                <input type="text" id="watchmanName" class="form-input" placeholder="Enter your name">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Security ID</label>
-                <select id="securityId" class="form-select">
-                    <option value="">Select Security ID</option>
-                    <option value="1">Security ID - 1</option>
-                    <option value="2">Security ID - 2</option>
-                    <option value="3">Security ID - 3</option>
-                    <option value="4">Security ID - 4</option>
-                    <option value="5">Security ID - 5</option>
-                </select>
+                <label class="form-label">Registered Name</label>
+                <input type="text" id="loginWatchmanName" class="form-input" placeholder="Enter your registered name">
             </div>
             <button id="loginBtn" class="auth-btn" onclick="login()">Sign In</button>
-            <div id="authMsg"></div>
+            <div id="loginMsg"></div>
+            <div class="auth-toggle">
+                <p>New security watchman?</p>
+                <button onclick="showRegister()">Register Here</button>
+            </div>
         </div>
 
         <!-- Main Application -->
@@ -106,6 +129,7 @@
                     <div class="user-details">
                         <h2 id="userName">Watchman</h2>
                         <p>Security ID: <span id="userSecurityId">1</span> | Status: <span id="userStatus">Active</span></p>
+                        <p>Contact: <span id="userContact">N/A</span></p>
                     </div>
                 </div>
                 <button class="logout-btn" onclick="logout()">Logout</button>
@@ -159,61 +183,159 @@
         let updateInterval = null;
         const API_BASE = window.location.origin;
 
-        // Authentication
-        function login() {
-            const name = document.getElementById('watchmanName').value.trim();
-            const securityId = document.getElementById('securityId').value;
+        // Show/Hide sections
+        function showRegister() {
+            document.getElementById('registerSection').classList.remove('hidden');
+            document.getElementById('loginSection').classList.add('hidden');
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('registerSection').classList.add('hidden');
+        }
+
+        // Registration
+        async function register() {
+            const name = document.getElementById('regWatchmanName').value.trim();
+            const contact = document.getElementById('regContactNumber').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
             
-            if (!name || !securityId) {
-                showAuthMsg('Please fill in all fields', 'error');
+            if (!name || !contact) {
+                showRegMsg('Please fill in name and contact number', 'error');
                 return;
             }
             
             if (name.length < 2) {
-                showAuthMsg('Name must be at least 2 characters', 'error');
+                showRegMsg('Name must be at least 2 characters', 'error');
                 return;
             }
             
-            currentWatchman = {
-                name: name,
-                securityId: securityId,
-                loginTime: new Date(),
-                status: 'active'
-            };
+            if (contact.length < 10) {
+                showRegMsg('Please enter a valid contact number', 'error');
+                return;
+            }
             
-            // Save to localStorage for session persistence
-            localStorage.setItem('currentWatchman', JSON.stringify(currentWatchman));
+            document.getElementById('registerBtn').disabled = true;
             
-            showMainApp();
-            showAuthMsg('Login successful!', 'success');
+            try {
+                const response = await fetch(`${API_BASE}/api/security/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name: name,
+                        contact: contact,
+                        email: email 
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showRegMsg(`Registration successful! Your Security ID is: ${result.securityId}`, 'success');
+                    
+                    // Show security ID prominently
+                    const idDisplay = document.createElement('div');
+                    idDisplay.className = 'security-id-display';
+                    idDisplay.innerHTML = `🛡️ Your Security ID: ${result.securityId}<br><small>Remember this ID for login</small>`;
+                    document.getElementById('regMsg').appendChild(idDisplay);
+                    
+                    // Auto-switch to login after 3 seconds
+                    setTimeout(() => {
+                        document.getElementById('loginWatchmanName').value = name;
+                        showLogin();
+                        showLoginMsg('Please login with your registered name', 'info');
+                    }, 4000);
+                    
+                } else {
+                    showRegMsg(result.error || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showRegMsg('Registration failed. Please try again.', 'error');
+            }
+            
+            document.getElementById('registerBtn').disabled = false;
+        }
+
+        // Login
+        async function login() {
+            const name = document.getElementById('loginWatchmanName').value.trim();
+            
+            if (!name) {
+                showLoginMsg('Please enter your registered name', 'error');
+                return;
+            }
+            
+            if (name.length < 2) {
+                showLoginMsg('Name must be at least 2 characters', 'error');
+                return;
+            }
+            
+            document.getElementById('loginBtn').disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/security/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentWatchman = {
+                        name: result.watchman.name,
+                        securityId: result.watchman.securityId,
+                        contact: result.watchman.contact,
+                        email: result.watchman.email || '',
+                        loginTime: new Date(),
+                        status: 'active'
+                    };
+                    
+                    // Save to localStorage for session persistence
+                    sessionStorage.setItem('currentWatchman', JSON.stringify(currentWatchman));
+                    
+                    showMainApp();
+                    showMsg('Login successful! ✅', 'success');
+                } else {
+                    showLoginMsg(result.error || 'Login failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showLoginMsg('Login failed. Please try again.', 'error');
+            }
+            
+            document.getElementById('loginBtn').disabled = false;
         }
 
         function logout() {
             currentWatchman = null;
             assignedOrders = [];
-            localStorage.removeItem('currentWatchman');
+            sessionStorage.removeItem('currentWatchman');
             
             if (updateInterval) {
                 clearInterval(updateInterval);
                 updateInterval = null;
             }
             
-            document.getElementById('authSection').style.display = 'block';
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('registerSection').classList.add('hidden');
             document.getElementById('mainApp').style.display = 'none';
             
-            // Clear form
-            document.getElementById('watchmanName').value = '';
-            document.getElementById('securityId').value = '';
-            clearAuthMsg();
+            // Clear forms
+            document.getElementById('loginWatchmanName').value = '';
+            clearLoginMsg();
         }
 
         function showMainApp() {
-            document.getElementById('authSection').style.display = 'none';
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('registerSection').classList.add('hidden');
             document.getElementById('mainApp').style.display = 'block';
             
             // Update UI with watchman info
             document.getElementById('userName').textContent = currentWatchman.name;
             document.getElementById('userSecurityId').textContent = currentWatchman.securityId;
+            document.getElementById('userContact').textContent = currentWatchman.contact;
             document.getElementById('userAvatar').textContent = currentWatchman.name.charAt(0).toUpperCase();
             
             // Start fetching orders
@@ -432,14 +554,24 @@
         }
 
         // Utility functions
-        function showAuthMsg(text, type) {
-            const msg = document.getElementById('authMsg');
+        function showRegMsg(text, type) {
+            const msg = document.getElementById('regMsg');
+            msg.innerHTML = `<div class="msg ${type}">${text}</div>`;
+            setTimeout(() => {
+                if (!msg.innerHTML.includes('security-id-display')) {
+                    msg.innerHTML = '';
+                }
+            }, 4000);
+        }
+
+        function showLoginMsg(text, type) {
+            const msg = document.getElementById('loginMsg');
             msg.innerHTML = `<div class="msg ${type}">${text}</div>`;
             setTimeout(() => msg.innerHTML = '', 4000);
         }
 
-        function clearAuthMsg() {
-            document.getElementById('authMsg').innerHTML = '';
+        function clearLoginMsg() {
+            document.getElementById('loginMsg').innerHTML = '';
         }
 
         function showMsg(text, type) {
@@ -464,16 +596,16 @@
 
         // Session persistence
         window.addEventListener('load', () => {
-            const savedWatchman = localStorage.getItem('currentWatchman');
+            const savedWatchman = sessionStorage.getItem('currentWatchman');
             if (savedWatchman) {
                 try {
                     currentWatchman = JSON.parse(savedWatchman);
-                    // Check if session is not too old (24 hours)
+                    // Check if session is not too old (8 hours)
                     const loginTime = new Date(currentWatchman.loginTime);
                     const now = new Date();
                     const hoursDiff = (now - loginTime) / (1000 * 60 * 60);
                     
-                    if (hoursDiff < 24) {
+                    if (hoursDiff < 8) {
                         showMainApp();
                     } else {
                         logout(); // Session expired
