@@ -29,6 +29,47 @@ const checkDB = async (req, res, next) => {
 // Serve static files
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
+// Get Order for Bill - NEW ENDPOINT
+app.get('/api/order/:orderId', checkDB, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    // Fetch order data
+    const order = await db.collection('orders').findOne({ orderId });
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    // Fetch security assignment data
+    const securityAssignment = await db.collection('security_assignments').findOne({ orderId });
+    
+    // Prepare complete order data for bill
+    const orderData = {
+      orderId: order.orderId,
+      customer: order.customer || 'Customer',
+      items: order.items || [],
+      total: order.total || 0,
+      status: order.status,
+      createdAt: order.createdAt,
+      completedAt: order.completedAt,
+      // Include security information if available
+      securityInfo: securityAssignment ? {
+        securityId: securityAssignment.securityId,
+        watchmanName: securityAssignment.watchmanName,
+        status: securityAssignment.status,
+        assignedAt: securityAssignment.assignedAt,
+        confirmedAt: securityAssignment.confirmedAt,
+        completionTime: securityAssignment.completionTime
+      } : null
+    };
+
+    res.json({ success: true, order: orderData });
+  } catch (error) {
+    console.error('Error fetching order for bill:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch order data' });
+  }
+});
+
 // Security Registration
 app.post('/api/security/register', checkDB, async (req, res) => {
   try {
@@ -296,6 +337,35 @@ app.get('/api/security/report', checkDB, async (req, res) => {
   } catch (error) {
     console.error('Error generating report:', error);
     res.status(500).json({ success: false, error: 'Failed to generate report' });
+  }
+});
+
+// Get All Orders with Security Status - NEW ENDPOINT for complete order list
+app.get('/api/orders/all', checkDB, async (req, res) => {
+  try {
+    const orders = await db.collection('orders').find({}).sort({ createdAt: -1 }).limit(50).toArray();
+    
+    const ordersWithSecurity = [];
+    for (const order of orders) {
+      const securityAssignment = await db.collection('security_assignments').findOne({ orderId: order.orderId });
+      
+      ordersWithSecurity.push({
+        ...order,
+        securityInfo: securityAssignment ? {
+          securityId: securityAssignment.securityId,
+          watchmanName: securityAssignment.watchmanName,
+          status: securityAssignment.status,
+          assignedAt: securityAssignment.assignedAt,
+          confirmedAt: securityAssignment.confirmedAt,
+          completionTime: securityAssignment.completionTime
+        } : null
+      });
+    }
+
+    res.json({ success: true, orders: ordersWithSecurity });
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch orders' });
   }
 });
 
