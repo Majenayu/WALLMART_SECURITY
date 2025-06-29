@@ -1,3 +1,458 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Security Watchman Portal</title><style>body{font-family:sans-serif;background:linear-gradient(135deg,#1e3c72,#2a5298);margin:0;color:#333}*{box-sizing:border-box}input,button{font:inherit}.container{max-width:1200px;margin:auto;padding:20px}.auth-container,.main-app,.header,.stats,.orders-section{background:#fff;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,.1)}.auth-container{max-width:400px;margin:15vh auto;padding:40px 30px;text-align:center}.auth-title{color:#1e3c72;font-size:2em;margin-bottom:15px}.form-group{margin:15px 0;text-align:left}.form-label{display:block;margin-bottom:8px}.form-input,.form-select{width:100%;padding:12px;border:2px solid #e1e5e9;border-radius:12px;font-size:15px}.form-input:focus{outline:none;border-color:#2a5298}.auth-btn{background:linear-gradient(45deg,#1e3c72,#2a5298);color:#fff;padding:12px;border:none;border-radius:12px;cursor:pointer;font-weight:600;width:100%;margin:10px 0}.auth-btn:hover{transform:translateY(-1px)}.auth-toggle{border-top:1px solid #eee;padding-top:15px;margin-top:15px}.auth-toggle p{margin-bottom:8px}.auth-toggle button{border:none;background:none;color:#2a5298;cursor:pointer;text-decoration:underline;font-weight:600}.main-app{display:none;padding:20px}.header{padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}.user-info{display:flex;align-items:center;gap:15px}.user-avatar{width:45px;height:45px;background:#2a5298;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-bottom:20px;padding:15px}.stat-card{padding:20px;text-align:center}.stat-number{font-size:1.8em;font-weight:bold;color:#2a5298}.orders-section{padding:20px}.section-title{font-size:1.5em;margin-bottom:10px;display:flex;align-items:center;gap:10px}.orders-grid{display:grid;gap:15px}.order-card{padding:15px;border-left:5px solid #ffc107;border-radius:10px;background:#f9f9f9;position:relative}.order-card.assigned{border-left-color:#28a745}.order-card.expired{border-left-color:#dc3545;opacity:.7}.order-header{margin-bottom:10px}.customer-name{font-weight:bold;font-size:1.2em}.order-meta{font-size:.85em;color:#666;display:flex;gap:10px}.order-items{margin:10px 0}.item-row{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:5px 0}.item-row:last-child{border-bottom:none}.order-total{background:#1e3c72;color:#fff;padding:10px;text-align:center;border-radius:8px;margin:10px 0;font-weight:bold}.timer{position:absolute;top:10px;right:10px;background:#ffc107;padding:5px 10px;border-radius:20px;font-size:.8em;font-weight:bold}.timer.warning{background:#ff6b35}.timer.expired{background:#dc3545;color:#fff}.action-buttons{margin-top:10px}.btn-confirm{background:#28a745;color:#fff;padding:8px 15px;border:none;border-radius:8px;cursor:pointer}.btn-confirm:hover{background:#218838}.btn-confirm:disabled{background:#6c757d;cursor:not-allowed}.msg{padding:10px;border-radius:8px;margin:10px 0;text-align:center;font-weight:600}.success{background:#d4edda;color:#155724}.error{background:#f8d7da;color:#721c24}.info{background:#d1ecf1;color:#0c5460}.hidden{display:none!important}@media(max-width:768px){.header{flex-direction:column;text-align:center}.stats{grid-template-columns:1fr 1fr}}</style></head><body><div class="container"><div id="registerSection" class="auth-container hidden"><div class="auth-title">🛡️ Register</div><div class="form-group"><label class="form-label">Full Name</label><input type="text" id="regWatchmanName" class="form-input" placeholder="Enter your full name"></div><div class="form-group"><label class="form-label">Contact Number</label><input type="tel" id="regContactNumber" class="form-input" placeholder="Enter your contact number"></div><div class="form-group"><label class="form-label">Email (Optional)</label><input type="email" id="regEmail" class="form-input" placeholder="Enter your email"></div><button id="registerBtn" class="auth-btn" onclick="register()">Register</button><div id="regMsg"></div><div class="auth-toggle"><p>Already registered?</p><button onclick="showLogin()">Login Here</button></div></div><div id="loginSection" class="auth-container"><div class="auth-title">🛡️ Login</div><div class="form-group"><label class="form-label">Registered Name</label><input type="text" id="loginWatchmanName" class="form-input" placeholder="Enter your name"></div><button id="loginBtn" class="auth-btn" onclick="login()">Sign In</button><div id="loginMsg"></div><div class="auth-toggle"><p>New here?</p><button onclick="showRegister()">Register</button></div></div><div id="mainApp" class="main-app"><div class="header"><div class="user-info"><div class="user-avatar" id="userAvatar">S</div><div><h2 id="userName">Watchman</h2><p>Security ID: <span id="userSecurityId">1</span></p><p>Contact: <span id="userContact">N/A</span></p></div></div><button onclick="logout()">Logout</button></div><div class="stats"><div class="stat-card"><div class="stat-number" id="totalAssigned">0</div><div>Total Assigned</div></div><div class="stat-card"><div class="stat-number" id="totalConfirmed">0</div><div>Confirmed</div></div><div class="stat-card"><div class="stat-number" id="totalPending">0</div><div>Pending</div></div><div class="stat-card"><div class="stat-number" id="efficiency">0%</div><div>Efficiency</div></div></div><div class="orders-section"><h3 class="section-title">📦 Assigned Orders</h3><div id="loadingOrders">⏳ Loading...</div><div id="ordersContainer" class="orders-grid hidden"></div><div id="emptyOrders" class="hidden">No orders</div></div></div></div><script>
-/* Add your minified script here (optional), or reference the original uncompressed script for development */
-</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Security Watchman Portal</title>
+    <style>
+        body{font-family:sans-serif;background:linear-gradient(135deg,#1e3c72,#2a5298);margin:0;color:#333}
+        *{box-sizing:border-box}
+        input,button{font:inherit}
+        .container{max-width:1200px;margin:auto;padding:20px}
+        .auth-container,.main-app,.header,.stats,.orders-section{background:#fff;border-radius:15px;box-shadow:0 5px 15px rgba(0,0,0,.1)}
+        .auth-container{max-width:400px;margin:15vh auto;padding:40px 30px;text-align:center}
+        .auth-title{color:#1e3c72;font-size:2em;margin-bottom:15px}
+        .form-group{margin:15px 0;text-align:left}
+        .form-label{display:block;margin-bottom:8px}
+        .form-input,.form-select{width:100%;padding:12px;border:2px solid #e1e5e9;border-radius:12px;font-size:15px}
+        .form-input:focus{outline:none;border-color:#2a5298}
+        .auth-btn{background:linear-gradient(45deg,#1e3c72,#2a5298);color:#fff;padding:12px;border:none;border-radius:12px;cursor:pointer;font-weight:600;width:100%;margin:10px 0}
+        .auth-btn:hover{transform:translateY(-1px)}
+        .auth-btn:disabled{background:#6c757d;cursor:not-allowed;transform:none}
+        .auth-toggle{border-top:1px solid #eee;padding-top:15px;margin-top:15px}
+        .auth-toggle p{margin-bottom:8px}
+        .auth-toggle button{border:none;background:none;color:#2a5298;cursor:pointer;text-decoration:underline;font-weight:600}
+        .main-app{display:none;padding:20px}
+        .header{padding:15px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+        .user-info{display:flex;align-items:center;gap:15px}
+        .user-avatar{width:45px;height:45px;background:#2a5298;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold}
+        .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-bottom:20px;padding:15px}
+        .stat-card{padding:20px;text-align:center}
+        .stat-number{font-size:1.8em;font-weight:bold;color:#2a5298}
+        .orders-section{padding:20px}
+        .section-title{font-size:1.5em;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+        .orders-grid{display:grid;gap:15px}
+        .order-card{padding:15px;border-left:5px solid #ffc107;border-radius:10px;background:#f9f9f9;position:relative}
+        .order-card.assigned{border-left-color:#28a745}
+        .order-card.expired{border-left-color:#dc3545;opacity:.7}
+        .order-header{margin-bottom:10px}
+        .customer-name{font-weight:bold;font-size:1.2em}
+        .order-meta{font-size:.85em;color:#666;display:flex;gap:10px}
+        .order-items{margin:10px 0}
+        .item-row{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:5px 0}
+        .item-row:last-child{border-bottom:none}
+        .order-total{background:#1e3c72;color:#fff;padding:10px;text-align:center;border-radius:8px;margin:10px 0;font-weight:bold}
+        .timer{position:absolute;top:10px;right:10px;background:#ffc107;padding:5px 10px;border-radius:20px;font-size:.8em;font-weight:bold}
+        .timer.warning{background:#ff6b35}
+        .timer.expired{background:#dc3545;color:#fff}
+        .action-buttons{margin-top:10px}
+        .btn-confirm{background:#28a745;color:#fff;padding:8px 15px;border:none;border-radius:8px;cursor:pointer}
+        .btn-confirm:hover{background:#218838}
+        .btn-confirm:disabled{background:#6c757d;cursor:not-allowed}
+        .msg{padding:10px;border-radius:8px;margin:10px 0;text-align:center;font-weight:600}
+        .success{background:#d4edda;color:#155724}
+        .error{background:#f8d7da;color:#721c24}
+        .info{background:#d1ecf1;color:#0c5460}
+        .hidden{display:none!important}
+        @media(max-width:768px){
+            .header{flex-direction:column;text-align:center}
+            .stats{grid-template-columns:1fr 1fr}
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="registerSection" class="auth-container hidden">
+            <div class="auth-title">🛡️ Register</div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" id="regWatchmanName" class="form-input" placeholder="Enter your full name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Contact Number</label>
+                <input type="tel" id="regContactNumber" class="form-input" placeholder="Enter your contact number">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email (Optional)</label>
+                <input type="email" id="regEmail" class="form-input" placeholder="Enter your email">
+            </div>
+            <button id="registerBtn" class="auth-btn" onclick="register()">Register</button>
+            <div id="regMsg"></div>
+            <div class="auth-toggle">
+                <p>Already registered?</p>
+                <button onclick="showLogin()">Login Here</button>
+            </div>
+        </div>
+
+        <div id="loginSection" class="auth-container">
+            <div class="auth-title">🛡️ Login</div>
+            <div class="form-group">
+                <label class="form-label">Registered Name</label>
+                <input type="text" id="loginWatchmanName" class="form-input" placeholder="Enter your name">
+            </div>
+            <button id="loginBtn" class="auth-btn" onclick="login()">Sign In</button>
+            <div id="loginMsg"></div>
+            <div class="auth-toggle">
+                <p>New here?</p>
+                <button onclick="showRegister()">Register</button>
+            </div>
+        </div>
+
+        <div id="mainApp" class="main-app">
+            <div class="header">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">S</div>
+                    <div>
+                        <h2 id="userName">Watchman</h2>
+                        <p>Security ID: <span id="userSecurityId">1</span></p>
+                        <p>Contact: <span id="userContact">N/A</span></p>
+                    </div>
+                </div>
+                <button onclick="logout()">Logout</button>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalAssigned">0</div>
+                    <div>Total Assigned</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalConfirmed">0</div>
+                    <div>Confirmed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalPending">0</div>
+                    <div>Pending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="efficiency">0%</div>
+                    <div>Efficiency</div>
+                </div>
+            </div>
+
+            <div class="orders-section">
+                <h3 class="section-title">📦 Assigned Orders</h3>
+                <div id="loadingOrders">⏳ Loading...</div>
+                <div id="ordersContainer" class="orders-grid hidden"></div>
+                <div id="emptyOrders" class="hidden">No orders assigned</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentUser = null;
+        let ordersRefreshInterval = null;
+        let statsRefreshInterval = null;
+
+        // API base URL - adjust based on your deployment
+        const API_BASE = window.location.origin;
+
+        // Utility functions
+        function showMessage(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="msg ${type}">${message}</div>`;
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+
+        function setLoading(buttonId, loading = true) {
+            const button = document.getElementById(buttonId);
+            button.disabled = loading;
+            button.textContent = loading ? 'Loading...' : (buttonId === 'registerBtn' ? 'Register' : 'Sign In');
+        }
+
+        // Authentication functions
+        function showLogin() {
+            document.getElementById('registerSection').classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('registerSection').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+
+        async function register() {
+            const name = document.getElementById('regWatchmanName').value.trim();
+            const contact = document.getElementById('regContactNumber').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+
+            if (!name || name.length < 2) {
+                showMessage('regMsg', 'Please enter a valid name (at least 2 characters)', 'error');
+                return;
+            }
+
+            if (!contact || contact.length < 10) {
+                showMessage('regMsg', 'Please enter a valid contact number (at least 10 digits)', 'error');
+                return;
+            }
+
+            setLoading('registerBtn', true);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/security/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name, contact, email })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('regMsg', `Registration successful! Your Security ID is: ${data.securityId}`, 'success');
+                    // Auto-login after successful registration
+                    setTimeout(() => {
+                        currentUser = data.watchman;
+                        showMainApp();
+                    }, 2000);
+                } else {
+                    showMessage('regMsg', data.error || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showMessage('regMsg', 'Network error. Please try again.', 'error');
+            } finally {
+                setLoading('registerBtn', false);
+            }
+        }
+
+        async function login() {
+            const name = document.getElementById('loginWatchmanName').value.trim();
+
+            if (!name || name.length < 2) {
+                showMessage('loginMsg', 'Please enter your registered name', 'error');
+                return;
+            }
+
+            setLoading('loginBtn', true);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/security/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentUser = data.watchman;
+                    showMessage('loginMsg', 'Login successful!', 'success');
+                    setTimeout(() => {
+                        showMainApp();
+                    }, 1000);
+                } else {
+                    showMessage('loginMsg', data.error || 'Login failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showMessage('loginMsg', 'Network error. Please try again.', 'error');
+            } finally {
+                setLoading('loginBtn', false);
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            clearInterval(ordersRefreshInterval);
+            clearInterval(statsRefreshInterval);
+            
+            // Clear form fields
+            document.getElementById('loginWatchmanName').value = '';
+            document.getElementById('regWatchmanName').value = '';
+            document.getElementById('regContactNumber').value = '';
+            document.getElementById('regEmail').value = '';
+            
+            showLogin();
+        }
+
+        // Main app functions
+        function showMainApp() {
+            if (!currentUser) return;
+
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('registerSection').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+
+            // Update user info
+            document.getElementById('userName').textContent = currentUser.name;
+            document.getElementById('userSecurityId').textContent = currentUser.securityId;
+            document.getElementById('userContact').textContent = currentUser.contact || 'N/A';
+            document.getElementById('userAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
+
+            // Load initial data
+            loadOrders();
+            loadStats();
+
+            // Set up refresh intervals
+            ordersRefreshInterval = setInterval(loadOrders, 10000); // Every 10 seconds
+            statsRefreshInterval = setInterval(loadStats, 30000); // Every 30 seconds
+        }
+
+        async function loadOrders() {
+            if (!currentUser) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/security/orders/${currentUser.securityId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    displayOrders(data.orders);
+                } else {
+                    console.error('Failed to load orders:', data.error);
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+            }
+        }
+
+        async function loadStats() {
+            if (!currentUser) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/security/stats/${currentUser.securityId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStatsDisplay(data.stats);
+                } else {
+                    console.error('Failed to load stats:', data.error);
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        function displayOrders(orders) {
+            const container = document.getElementById('ordersContainer');
+            const loading = document.getElementById('loadingOrders');
+            const empty = document.getElementById('emptyOrders');
+
+            loading.classList.add('hidden');
+
+            if (!orders || orders.length === 0) {
+                container.classList.add('hidden');
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+            container.classList.remove('hidden');
+
+            container.innerHTML = orders.map(order => {
+                const assignedTime = new Date(order.assignedAt);
+                const elapsed = Math.floor((Date.now() - assignedTime.getTime()) / 1000);
+                const timeLeft = Math.max(0, 300 - elapsed); // 5 minutes = 300 seconds
+                
+                let timerClass = '';
+                let timerText = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+                
+                if (timeLeft === 0) {
+                    timerClass = 'expired';
+                    timerText = 'EXPIRED';
+                } else if (timeLeft < 60) {
+                    timerClass = 'warning';
+                }
+
+                const itemsHtml = order.items.map(item => 
+                    `<div class="item-row">
+                        <span>${item.name} x${item.quantity}</span>
+                        <span>₹${item.price}</span>
+                    </div>`
+                ).join('');
+
+                return `
+                    <div class="order-card ${timeLeft === 0 ? 'expired' : 'assigned'}">
+                        <div class="timer ${timerClass}">${timerText}</div>
+                        <div class="order-header">
+                            <div class="customer-name">${order.customerName}</div>
+                            <div class="order-meta">
+                                <span>Order: #${order.orderId}</span>
+                                <span>Assigned: ${assignedTime.toLocaleTimeString()}</span>
+                            </div>
+                        </div>
+                        <div class="order-items">${itemsHtml}</div>
+                        <div class="order-total">Total: ₹${order.totalAmount}</div>
+                        <div class="action-buttons">
+                            <button class="btn-confirm" 
+                                    onclick="confirmOrder('${order.orderId}')" 
+                                    ${timeLeft === 0 ? 'disabled' : ''}>
+                                ${timeLeft === 0 ? 'Expired' : 'Confirm Delivery'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Update timers every second
+            setTimeout(() => {
+                if (orders.length > 0) displayOrders(orders);
+            }, 1000);
+        }
+
+        function updateStatsDisplay(stats) {
+            document.getElementById('totalAssigned').textContent = stats.totalAssigned || 0;
+            document.getElementById('totalConfirmed').textContent = stats.totalConfirmed || 0;
+            document.getElementById('totalPending').textContent = stats.totalPending || 0;
+            document.getElementById('efficiency').textContent = `${stats.efficiency || 0}%`;
+        }
+
+        async function confirmOrder(orderId) {
+            if (!currentUser) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/security/confirm/${orderId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        securityId: currentUser.securityId,
+                        watchmanName: currentUser.name
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Show success message
+                    alert(`Order confirmed successfully! Completion time: ${data.completionTime} seconds`);
+                    // Refresh orders and stats
+                    loadOrders();
+                    loadStats();
+                } else {
+                    alert(data.error || 'Failed to confirm order');
+                }
+            } catch (error) {
+                console.error('Error confirming order:', error);
+                alert('Network error. Please try again.');
+            }
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            // Start with login screen
+            showLogin();
+        });
+
+        // Handle Enter key press for forms
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                if (!document.getElementById('loginSection').classList.contains('hidden')) {
+                    login();
+                } else if (!document.getElementById('registerSection').classList.contains('hidden')) {
+                    register();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
