@@ -32,31 +32,120 @@
         .orders-section{padding:20px}
         .section-title{font-size:1.5em;margin-bottom:10px;display:flex;align-items:center;gap:10px}
         .orders-grid{display:grid;gap:15px}
-        .order-card{padding:15px;border-left:5px solid #ffc107;border-radius:10px;background:#f9f9f9;position:relative}
+        
+        /* Compact order card styles */
+        .order-card{
+            padding:15px;
+            border-left:5px solid #ffc107;
+            border-radius:10px;
+            background:#f9f9f9;
+            position:relative;
+            cursor:pointer;
+            transition:all 0.3s ease;
+        }
+        .order-card:hover{
+            background:#f0f0f0;
+            transform:translateY(-2px);
+        }
         .order-card.assigned{border-left-color:#28a745}
         .order-card.expired{border-left-color:#dc3545;opacity:.7}
+        .order-card.expanded{
+            background:#fff;
+            box-shadow:0 5px 15px rgba(0,0,0,.1);
+        }
+        
+        /* Compact view */
+        .order-compact{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+        }
+        .order-compact-info{
+            flex:1;
+        }
+        .customer-name-compact{
+            font-weight:bold;
+            font-size:1.1em;
+            margin-bottom:3px;
+        }
+        .order-summary{
+            font-size:0.9em;
+            color:#666;
+        }
+        .order-amount{
+            font-size:1.2em;
+            font-weight:bold;
+            color:#2a5298;
+            margin-right:10px;
+        }
+        
+        /* Expanded view */
+        .order-details{
+            display:none;
+            margin-top:15px;
+            padding-top:15px;
+            border-top:2px solid #eee;
+        }
+        .order-details.show{
+            display:block;
+        }
         .order-header{margin-bottom:10px}
         .customer-name{font-weight:bold;font-size:1.2em}
-        .order-meta{font-size:.85em;color:#666;display:flex;gap:10px}
+        .order-meta{font-size:.85em;color:#666;display:flex;gap:10px;margin-top:5px}
         .order-items{margin:10px 0}
         .item-row{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:5px 0}
         .item-row:last-child{border-bottom:none}
         .order-total{background:#1e3c72;color:#fff;padding:10px;text-align:center;border-radius:8px;margin:10px 0;font-weight:bold}
-        .timer{position:absolute;top:10px;right:10px;background:#ffc107;padding:5px 10px;border-radius:20px;font-size:.8em;font-weight:bold}
+        
+        .timer{
+            position:absolute;
+            top:10px;
+            right:10px;
+            background:#ffc107;
+            padding:5px 10px;
+            border-radius:20px;
+            font-size:.8em;
+            font-weight:bold;
+            min-width:60px;
+            text-align:center;
+        }
         .timer.warning{background:#ff6b35}
         .timer.expired{background:#dc3545;color:#fff}
         .action-buttons{margin-top:10px}
-        .btn-confirm{background:#28a745;color:#fff;padding:8px 15px;border:none;border-radius:8px;cursor:pointer}
+        .btn-confirm{background:#28a745;color:#fff;padding:8px 15px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
         .btn-confirm:hover{background:#218838}
         .btn-confirm:disabled{background:#6c757d;cursor:not-allowed}
+        .btn-details{background:#17a2b8;color:#fff;padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-size:0.9em;margin-left:10px}
+        .btn-details:hover{background:#138496}
+        
         .msg{padding:10px;border-radius:8px;margin:10px 0;text-align:center;font-weight:600}
         .success{background:#d4edda;color:#155724}
         .error{background:#f8d7da;color:#721c24}
         .info{background:#d1ecf1;color:#0c5460}
         .hidden{display:none!important}
+        
+        /* Notification styles */
+        .notification{
+            position:fixed;
+            top:20px;
+            right:20px;
+            padding:15px;
+            border-radius:8px;
+            color:#fff;
+            font-weight:600;
+            z-index:1000;
+            max-width:300px;
+            box-shadow:0 5px 15px rgba(0,0,0,.2);
+        }
+        .notification.success{background:#28a745;}
+        .notification.error{background:#dc3545;}
+        .notification.info{background:#17a2b8;}
+        
         @media(max-width:768px){
             .header{flex-direction:column;text-align:center}
             .stats{grid-template-columns:1fr 1fr}
+            .order-compact{flex-direction:column;align-items:flex-start}
+            .order-amount{margin-right:0;margin-top:5px}
         }
     </style>
 </head>
@@ -108,7 +197,7 @@
                         <p>Contact: <span id="userContact">N/A</span></p>
                     </div>
                 </div>
-                <button onclick="logout()">Logout</button>
+                <button onclick="logout()" class="auth-btn" style="width:auto;padding:8px 16px">Logout</button>
             </div>
 
             <div class="stats">
@@ -132,9 +221,15 @@
 
             <div class="orders-section">
                 <h3 class="section-title">📦 Assigned Orders</h3>
-                <div id="loadingOrders">⏳ Loading...</div>
+                <div id="loadingOrders">⏳ Loading orders...</div>
                 <div id="ordersContainer" class="orders-grid hidden"></div>
-                <div id="emptyOrders" class="hidden">No orders assigned</div>
+                <div id="emptyOrders" class="hidden">
+                    <div style="text-align:center;padding:40px;color:#666">
+                        <div style="font-size:3em;margin-bottom:10px">📋</div>
+                        <div>No orders assigned yet</div>
+                        <div style="font-size:0.9em;margin-top:5px">Orders will appear here when assigned</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -144,8 +239,10 @@
         let currentUser = null;
         let ordersRefreshInterval = null;
         let statsRefreshInterval = null;
+        let timerInterval = null;
+        let expandedOrderId = null;
 
-        // API base URL - adjust based on your deployment
+        // API base URL
         const API_BASE = window.location.origin;
 
         // Utility functions
@@ -155,6 +252,17 @@
             setTimeout(() => {
                 element.innerHTML = '';
             }, 5000);
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 4000);
         }
 
         function setLoading(buttonId, loading = true) {
@@ -206,7 +314,6 @@
 
                 if (data.success) {
                     showMessage('regMsg', `Registration successful! Your Security ID is: ${data.securityId}`, 'success');
-                    // Auto-login after successful registration
                     setTimeout(() => {
                         currentUser = data.watchman;
                         showMainApp();
@@ -262,8 +369,10 @@
 
         function logout() {
             currentUser = null;
+            expandedOrderId = null;
             clearInterval(ordersRefreshInterval);
             clearInterval(statsRefreshInterval);
+            clearInterval(timerInterval);
             
             // Clear form fields
             document.getElementById('loginWatchmanName').value = '';
@@ -293,8 +402,9 @@
             loadStats();
 
             // Set up refresh intervals
-            ordersRefreshInterval = setInterval(loadOrders, 10000); // Every 10 seconds
-            statsRefreshInterval = setInterval(loadStats, 30000); // Every 30 seconds
+            ordersRefreshInterval = setInterval(loadOrders, 5000); // Every 5 seconds
+            statsRefreshInterval = setInterval(loadStats, 15000); // Every 15 seconds
+            timerInterval = setInterval(updateTimers, 1000); // Every second
         }
 
         async function loadOrders() {
@@ -369,33 +479,102 @@
                     </div>`
                 ).join('');
 
+                const isExpanded = expandedOrderId === order.orderId;
+
                 return `
-                    <div class="order-card ${timeLeft === 0 ? 'expired' : 'assigned'}">
-                        <div class="timer ${timerClass}">${timerText}</div>
-                        <div class="order-header">
-                            <div class="customer-name">${order.customerName}</div>
-                            <div class="order-meta">
-                                <span>Order: #${order.orderId}</span>
-                                <span>Assigned: ${assignedTime.toLocaleTimeString()}</span>
+                    <div class="order-card ${timeLeft === 0 ? 'expired' : 'assigned'} ${isExpanded ? 'expanded' : ''}" 
+                         data-order-id="${order.orderId}">
+                        <div class="timer ${timerClass}" data-time-left="${timeLeft}">${timerText}</div>
+                        
+                        <div class="order-compact" onclick="toggleOrderDetails('${order.orderId}')">
+                            <div class="order-compact-info">
+                                <div class="customer-name-compact">${order.customerName}</div>
+                                <div class="order-summary">
+                                    #${order.orderId} • ${order.items.length} items • ${assignedTime.toLocaleTimeString()}
+                                </div>
                             </div>
+                            <div class="order-amount">₹${order.totalAmount}</div>
                         </div>
-                        <div class="order-items">${itemsHtml}</div>
-                        <div class="order-total">Total: ₹${order.totalAmount}</div>
-                        <div class="action-buttons">
-                            <button class="btn-confirm" 
-                                    onclick="confirmOrder('${order.orderId}')" 
-                                    ${timeLeft === 0 ? 'disabled' : ''}>
-                                ${timeLeft === 0 ? 'Expired' : 'Confirm Delivery'}
-                            </button>
+                        
+                        <div class="order-details ${isExpanded ? 'show' : ''}">
+                            <div class="order-header">
+                                <div class="customer-name">${order.customerName}</div>
+                                <div class="order-meta">
+                                    <span>Order: #${order.orderId}</span>
+                                    <span>Assigned: ${assignedTime.toLocaleTimeString()}</span>
+                                </div>
+                            </div>
+                            <div class="order-items">${itemsHtml}</div>
+                            <div class="order-total">Total: ₹${order.totalAmount}</div>
+                            <div class="action-buttons">
+                                <button class="btn-confirm" 
+                                        onclick="confirmOrder('${order.orderId}')" 
+                                        ${timeLeft === 0 ? 'disabled' : ''}>
+                                    ${timeLeft === 0 ? 'Expired' : 'Confirm Delivery'}
+                                </button>
+                                <button class="btn-details" onclick="viewFullBill('${order.orderId}')">
+                                    View Bill
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
+        }
 
-            // Update timers every second
-            setTimeout(() => {
-                if (orders.length > 0) displayOrders(orders);
-            }, 1000);
+        function toggleOrderDetails(orderId) {
+            const card = document.querySelector(`[data-order-id="${orderId}"]`);
+            const details = card.querySelector('.order-details');
+            
+            if (expandedOrderId === orderId) {
+                expandedOrderId = null;
+                card.classList.remove('expanded');
+                details.classList.remove('show');
+            } else {
+                // Close any other expanded order
+                if (expandedOrderId) {
+                    const prevCard = document.querySelector(`[data-order-id="${expandedOrderId}"]`);
+                    if (prevCard) {
+                        prevCard.classList.remove('expanded');
+                        prevCard.querySelector('.order-details').classList.remove('show');
+                    }
+                }
+                
+                expandedOrderId = orderId;
+                card.classList.add('expanded');
+                details.classList.add('show');
+            }
+        }
+
+        function updateTimers() {
+            const timers = document.querySelectorAll('.timer');
+            timers.forEach(timer => {
+                let timeLeft = parseInt(timer.dataset.timeLeft || '0');
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    timer.dataset.timeLeft = timeLeft;
+                    
+                    if (timeLeft === 0) {
+                        timer.className = 'timer expired';
+                        timer.textContent = 'EXPIRED';
+                        // Disable confirm button
+                        const card = timer.closest('.order-card');
+                        const confirmBtn = card.querySelector('.btn-confirm');
+                        if (confirmBtn) {
+                            confirmBtn.disabled = true;
+                            confirmBtn.textContent = 'Expired';
+                        }
+                    } else {
+                        const minutes = Math.floor(timeLeft / 60);
+                        const seconds = timeLeft % 60;
+                        timer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        
+                        if (timeLeft < 60) {
+                            timer.className = 'timer warning';
+                        }
+                    }
+                }
+            });
         }
 
         function updateStatsDisplay(stats) {
@@ -423,23 +602,38 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    // Show success message
-                    alert(`Order confirmed successfully! Completion time: ${data.completionTime} seconds`);
-                    // Refresh orders and stats
+                    showNotification(`Order confirmed! Completion time: ${data.completionTime}s`, 'success');
+                    expandedOrderId = null;
                     loadOrders();
                     loadStats();
                 } else {
-                    alert(data.error || 'Failed to confirm order');
+                    showNotification(data.error || 'Failed to confirm order', 'error');
                 }
             } catch (error) {
                 console.error('Error confirming order:', error);
-                alert('Network error. Please try again.');
+                showNotification('Network error. Please try again.', 'error');
+            }
+        }
+
+        async function viewFullBill(orderId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/order/${orderId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Open bill in new window
+                    window.open(`bill.html?orderId=${orderId}`, '_blank');
+                } else {
+                    showNotification('Unable to load bill details', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading bill:', error);
+                showNotification('Failed to load bill', 'error');
             }
         }
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
-            // Start with login screen
             showLogin();
         });
 
