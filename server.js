@@ -1,8 +1,7 @@
 const express = require('express');
-const { MongoClient, ObjectId } = require('mongodb');
+const { MongoClient } = require('mongodb');
 const path = require('path');
 const cors = require('cors');
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -10,438 +9,190 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://wal:wal@wal.ixnqgp
 
 let db, mongoClient;
 
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? [process.env.FRONTEND_URL, /\.render\.com$/, 'http://localhost:3000']
-    : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'],
-  credentials: true
-}));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.static('.'));
 app.use(express.json({ limit: '10mb' }));
 
 const connectDB = async () => {
   if (mongoClient) try { await mongoClient.close(); } catch {}
-  mongoClient = new MongoClient(MONGODB_URI, { 
-    serverSelectionTimeoutMS: 15000, 
-    socketTimeoutMS: 30000, 
-    maxPoolSize: 10 
-  });
+  mongoClient = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 15000 });
   await mongoClient.connect();
   db = mongoClient.db('qr_items');
-  await db.admin().ping();
   console.log('MongoDB connected');
-
-  // Create indexes for better performance
-  const indexes = [
-    ['security_watchmen', { name: 1 }, { unique: true }],
-    ['security_watchmen', { securityId: 1 }, { unique: true }],
-    ['security_watchmen', { contact: 1 }],
-    ['security_assignments', { orderId: 1 }],
-    ['security_assignments', { securityId: 1 }],
-    ['security_assignments', { status: 1 }],
-    ['security_assignments', { assignedAt: 1 }],
-    ['security_stats', { securityId: 1 }, { unique: true }],
-    ['orders', { orderId: 1 }, { unique: true }],
-    ['orders', { status: 1 }]
-  ];
-  
-  for (const [collection, keys, options] of indexes) {
-    try {
-      await db.collection(collection).createIndex(keys, options || {});
-    } catch (error) {
-      if (error.code !== 11000) console.error(`Index creation failed for ${collection}:`, error);
-    }
-  }
 };
 
 const checkDB = async (req, res, next) => {
-  if (!db) {
-    try { 
-      await connectDB(); 
-    } catch { 
-      return res.status(500).json({ success: false, error: 'Database connection failed' }); 
-    }
-  }
-  
-  try { 
-    await db.admin().ping(); 
-    next(); 
-  } catch { 
-    try { 
-      await connectDB(); 
-      next(); 
-    } catch { 
-      res.status(500).json({ success: false, error: 'Database unavailable' }); 
-    } 
-  }
+  if (!db) try { await connectDB(); } catch { return res.status(500).json({ success: false, error: 'DB connection failed' }); }
+  try { await db.admin().ping(); next(); } catch { try { await connectDB(); next(); } catch { res.status(500).json({ success: false, error: 'DB unavailable' }); }}
 };
 
 // Serve static files
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/bill.html', (req, res) => res.sendFile(path.join(__dirname, 'bill.html')));
 
-// Security Watchman Registration
+// Security Registration
 app.post('/api/security/register', checkDB, async (req, res) => {
   try {
     const { name, contact, email } = req.body;
-    
     if (!name || !contact || name.length < 2 || contact.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid name or contact number' 
-      });
+      return res.status(400).json({ success: false, error: 'Invalid name or contact' });
     }
 
     const nameLower = name.trim().toLowerCase();
     const existing = await db.collection('security_watchmen').findOne({ nameLower });
-    
-    if (existing) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Name already registered. Try logging in.' 
-      });
-    }
+    if (existing) return res.status(400).json({ success: false, error: 'Name already registered' });
 
-    // Find available security ID (1-5)
-    const usedIds = await db.collection('security_watchmen')
-      .find({}, { projection: { securityId: 1 } })
-      .toArray();
+    const usedIds = await db.collection('security_watchmen').find({}, { projection: { securityId: 1 } }).toArray();
     const usedSecurityIds = usedIds.map(w => parseInt(w.securityId));
     const availableId = ['1', '2', '3', '4', '5'].find(id => !usedSecurityIds.includes(parseInt(id)));
-    
-    if (!availableId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Maximum 5 watchmen limit reached' 
-      });
-    }
+    if (!availableId) return res.status(400).json({ success: false, error: 'Max 5 watchmen limit reached' });
 
     const newWatchman = {
-      name: name.trim(),
-      nameLower,
-      contact: contact.trim(),
-      email: email?.trim() || '',
-      securityId: availableId,
-      registeredAt: new Date(),
-      status: 'active',
-      createdAt: new Date(),
-      lastLogin: null
+      name: name.trim(), nameLower, contact: contact.trim(), email: email?.trim() || '',
+      securityId: availableId, registeredAt: new Date(), status: 'active'
     };
 
     await db.collection('security_watchmen').insertOne(newWatchman);
-    
-    // Initialize stats
     await db.collection('security_stats').insertOne({
-      securityId: availableId,
-      totalAssigned: 0,
-      totalConfirmed: 0,
-      totalExpired: 0,
-      totalPending: 0,
-      averageCompletionTime: 0,
-      efficiency: 0,
-      createdAt: new Date(),
-      lastUpdated: new Date()
+      securityId: availableId, totalAssigned: 0, totalConfirmed: 0, totalPending: 0, efficiency: 0, createdAt: new Date()
     });
 
-    res.json({ 
-      success: true, 
-      message: 'Registration successful', 
-      securityId: availableId,
-      watchman: {
-        name: newWatchman.name,
-        securityId: availableId,
-        contact: newWatchman.contact,
-        email: newWatchman.email
-      }
-    });
+    res.json({ success: true, securityId: availableId, watchman: { name: newWatchman.name, securityId: availableId, contact: newWatchman.contact, email: newWatchman.email }});
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ success: false, error: 'Registration failed' });
   }
 });
 
-// Security Watchman Login
+// Security Login
 app.post('/api/security/login', checkDB, async (req, res) => {
   try {
     const { name } = req.body;
-    
-    if (!name || name.length < 2) {
-      return res.status(400).json({ success: false, error: 'Name is required' });
-    }
+    if (!name || name.length < 2) return res.status(400).json({ success: false, error: 'Name required' });
 
-    const watchman = await db.collection('security_watchmen').findOne({ 
-      nameLower: name.trim().toLowerCase(),
-      status: 'active' 
-    });
-    
-    if (!watchman) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Watchman not found or inactive' 
-      });
-    }
+    const watchman = await db.collection('security_watchmen').findOne({ nameLower: name.trim().toLowerCase(), status: 'active' });
+    if (!watchman) return res.status(404).json({ success: false, error: 'Watchman not found' });
 
-    // Update last login
-    await db.collection('security_watchmen').updateOne(
-      { _id: watchman._id },
-      { 
-        $set: { 
-          lastLogin: new Date(),
-          updatedAt: new Date() 
-        } 
-      }
-    );
+    await db.collection('security_watchmen').updateOne({ _id: watchman._id }, { $set: { lastLogin: new Date() }});
 
-    res.json({ 
-      success: true, 
-      message: 'Login successful',
-      watchman: {
-        name: watchman.name,
-        securityId: watchman.securityId,
-        contact: watchman.contact,
-        email: watchman.email,
-        registeredAt: watchman.registeredAt
-      }
-    });
+    res.json({ success: true, watchman: { name: watchman.name, securityId: watchman.securityId, contact: watchman.contact, email: watchman.email }});
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ success: false, error: 'Login failed' });
   }
 });
 
-// Get all active watchmen
-app.get('/api/security/watchmen', checkDB, async (req, res) => {
-  try {
-    const watchmen = await db.collection('security_watchmen')
-      .find({ status: 'active' }, {
-        projection: { 
-          name: 1, 
-          securityId: 1, 
-          contact: 1, 
-          email: 1, 
-          registeredAt: 1, 
-          lastLogin: 1 
-        }
-      })
-      .sort({ securityId: 1 })
-      .toArray();
-    
-    res.json({ success: true, watchmen });
-  } catch (error) {
-    console.error('Error fetching watchmen:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch watchmen' });
-  }
-});
-
-// Get orders assigned to a specific security watchman
+// Get Orders for Security
 app.get('/api/security/orders/:securityId', checkDB, async (req, res) => {
   try {
     const { securityId } = req.params;
-    const validIds = ['1', '2', '3', '4', '5'];
-    
-    if (!validIds.includes(securityId)) {
-      return res.status(400).json({ success: false, error: 'Invalid security ID' });
-    }
+    if (!['1', '2', '3', '4', '5'].includes(securityId)) return res.status(400).json({ success: false, error: 'Invalid security ID' });
 
-    // Verify watchman exists
-    const watchman = await db.collection('security_watchmen').findOne({ 
-      securityId, 
-      status: 'active' 
-    });
-    
-    if (!watchman) {
-      return res.status(404).json({ success: false, error: 'Watchman not found' });
-    }
+    const watchman = await db.collection('security_watchmen').findOne({ securityId, status: 'active' });
+    if (!watchman) return res.status(404).json({ success: false, error: 'Watchman not found' });
 
-    // Get assignments within the last 5 minutes that are still assigned
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const assignments = await db.collection('security_assignments')
-      .find({ 
-        securityId, 
-        status: 'assigned',
-        assignedAt: { $gte: fiveMinutesAgo }
-      })
-      .sort({ assignedAt: -1 })
-      .limit(10)
-      .toArray();
+      .find({ securityId, status: 'assigned', assignedAt: { $gte: fiveMinutesAgo }})
+      .sort({ assignedAt: -1 }).limit(10).toArray();
 
-    // Get order details for each assignment
     const orders = [];
     for (const assignment of assignments) {
-      const order = await db.collection('orders').findOne({ 
-        orderId: assignment.orderId 
-      });
-      
+      const order = await db.collection('orders').findOne({ orderId: assignment.orderId });
       if (order && order.status === 'completed') {
         orders.push({
           orderId: order.orderId,
           customerName: order.customer || 'Unknown Customer',
           items: order.items || [],
           totalAmount: order.total || 0,
-          assignedAt: assignment.assignedAt,
-          assignmentId: assignment._id,
-          status: assignment.status
+          assignedAt: assignment.assignedAt
         });
       }
     }
 
     res.json({ success: true, orders });
   } catch (error) {
-    console.error('Error fetching orders:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch orders' });
+    console.error('Error loading orders:', error);
+    res.status(500).json({ success: false, error: 'Failed to load orders' });
   }
 });
 
-// Confirm order delivery by security watchman
+// Confirm Order
 app.post('/api/security/confirm/:orderId', checkDB, async (req, res) => {
   try {
     const { orderId } = req.params;
     const { securityId, watchmanName } = req.body;
-    
-    if (!orderId || !securityId || !watchmanName) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required fields' 
-      });
-    }
+    if (!orderId || !securityId || !watchmanName) return res.status(400).json({ success: false, error: 'Missing fields' });
 
-    // Verify watchman
-    const watchman = await db.collection('security_watchmen').findOne({ 
-      securityId, 
-      status: 'active' 
-    });
-    
+    const watchman = await db.collection('security_watchmen').findOne({ securityId, status: 'active' });
     if (!watchman || watchman.nameLower !== watchmanName.trim().toLowerCase()) {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Watchman verification failed' 
-      });
+      return res.status(403).json({ success: false, error: 'Watchman verification failed' });
     }
 
-    // Find assignment
-    const assignment = await db.collection('security_assignments').findOne({ 
-      orderId, 
-      securityId, 
-      status: 'assigned' 
-    });
-    
-    if (!assignment) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Assignment not found or already processed' 
-      });
+    const assignment = await db.collection('security_assignments').findOne({ orderId, securityId, status: 'assigned' });
+    if (!assignment) return res.status(404).json({ success: false, error: 'Assignment not found' });
+
+    const elapsedSeconds = Math.floor((Date.now() - new Date(assignment.assignedAt).getTime()) / 1000);
+    if (elapsedSeconds > 300) {
+      await db.collection('security_assignments').updateOne({ _id: assignment._id }, { $set: { status: 'expired' }});
+      return res.status(400).json({ success: false, error: 'Assignment expired' });
     }
 
-    // Check if assignment has expired (5 minutes)
-    const assignedTime = new Date(assignment.assignedAt);
-    const elapsedSeconds = (Date.now() - assignedTime.getTime()) / 1000;
-    
-    if (elapsedSeconds > 300) { // 5 minutes = 300 seconds
-      // Mark as expired and reassign
-      await db.collection('security_assignments').updateOne(
-        { _id: assignment._id },
-        { 
-          $set: { 
-            status: 'expired',
-            expiredAt: new Date()
-          } 
-        }
-      );
-      
-      await reassignOrder(orderId, securityId);
-      await updateSecurityStats(securityId, 'expired');
-      
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Assignment expired and has been reassigned' 
-      });
-    }
-
-    // Confirm the assignment
+    // Confirm assignment
     await db.collection('security_assignments').updateOne(
       { _id: assignment._id },
-      { 
-        $set: { 
-          status: 'confirmed',
-          confirmedAt: new Date(),
-          confirmedBy: watchman.name,
-          completionTime: Math.floor(elapsedSeconds)
-        } 
-      }
+      { $set: { status: 'confirmed', confirmedAt: new Date(), confirmedBy: watchman.name, completionTime: elapsedSeconds }}
     );
 
-    // Update order status
+    // Update order
     await db.collection('orders').updateOne(
       { orderId },
-      { 
-        $set: { 
-          status: 'verified',
-          verifiedAt: new Date(),
-          verifiedBy: `Security-${securityId} (${watchman.name})`,
-          updatedAt: new Date()
-        } 
-      }
+      { $set: { status: 'verified', verifiedAt: new Date(), verifiedBy: `Security-${securityId} (${watchman.name})` }}
     );
 
-    // Update stats
-    await updateSecurityStats(securityId, 'confirmed');
-
-    res.json({ 
-      success: true, 
-      message: 'Order confirmed successfully',
-      completionTime: Math.floor(elapsedSeconds)
+    // Add to work log
+    await db.collection('security_worklog').insertOne({
+      securityId, watchmanName: watchman.name, orderId,
+      customerName: assignment.customerName || 'Unknown',
+      amount: assignment.totalAmount || 0,
+      completionTime: elapsedSeconds,
+      timestamp: new Date(),
+      date: new Date().toISOString().split('T')[0]
     });
+
+    // Update stats
+    await db.collection('security_stats').updateOne(
+      { securityId },
+      { $inc: { totalConfirmed: 1 }, $set: { lastUpdated: new Date() }},
+      { upsert: true }
+    );
+
+    res.json({ success: true, completionTime: elapsedSeconds });
   } catch (error) {
     console.error('Error confirming order:', error);
     res.status(500).json({ success: false, error: 'Failed to confirm order' });
   }
 });
 
-// Get security stats
+// Get Security Stats
 app.get('/api/security/stats/:securityId', checkDB, async (req, res) => {
   try {
     const { securityId } = req.params;
-    
-    // Verify watchman exists
-    const watchman = await db.collection('security_watchmen').findOne({ 
-      securityId, 
-      status: 'active' 
-    });
-    
-    if (!watchman) {
-      return res.status(404).json({ success: false, error: 'Watchman not found' });
-    }
+    const watchman = await db.collection('security_watchmen').findOne({ securityId, status: 'active' });
+    if (!watchman) return res.status(404).json({ success: false, error: 'Watchman not found' });
 
-    // Get stats from database
     let stats = await db.collection('security_stats').findOne({ securityId });
-    
     if (!stats) {
-      // Create initial stats if not found
-      stats = {
-        securityId,
-        totalAssigned: 0,
-        totalConfirmed: 0,
-        totalExpired: 0,
-        totalPending: 0,
-        averageCompletionTime: 0,
-        efficiency: 0,
-        lastUpdated: new Date()
-      };
+      stats = { securityId, totalAssigned: 0, totalConfirmed: 0, totalPending: 0, efficiency: 0 };
       await db.collection('security_stats').insertOne(stats);
     }
 
-    // Get current pending count
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const pendingCount = await db.collection('security_assignments').countDocuments({ 
-      securityId, 
-      status: 'assigned',
-      assignedAt: { $gte: fiveMinutesAgo }
+      securityId, status: 'assigned', assignedAt: { $gte: fiveMinutesAgo }
     });
 
     stats.totalPending = pendingCount;
-    stats.efficiency = stats.totalAssigned > 0 
-      ? Math.round((stats.totalConfirmed / stats.totalAssigned) * 100) 
-      : 0;
+    stats.efficiency = stats.totalAssigned > 0 ? Math.round((stats.totalConfirmed / stats.totalAssigned) * 100) : 0;
 
     res.json({ success: true, stats });
   } catch (error) {
@@ -450,253 +201,131 @@ app.get('/api/security/stats/:securityId', checkDB, async (req, res) => {
   }
 });
 
-// Get specific order details (for bill generation)
-app.get('/api/order/:orderId', checkDB, async (req, res) => {
+// Get Work Log
+app.get('/api/security/worklog/:securityId', checkDB, async (req, res) => {
   try {
-    const { orderId } = req.params;
+    const { securityId } = req.params;
+    const today = new Date().toISOString().split('T')[0];
     
-    const order = await db.collection('orders').findOne({ orderId });
-    
-    if (!order) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Order not found' 
-      });
-    }
+    const workLog = await db.collection('security_worklog')
+      .find({ securityId, date: today })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .toArray();
 
-    // Get security assignment info if available
-    const assignment = await db.collection('security_assignments').findOne({ 
-      orderId,
-      status: { $in: ['assigned', 'confirmed'] }
-    });
-
-    let securityInfo = null;
-    if (assignment) {
-      const watchman = await db.collection('security_watchmen').findOne({ 
-        securityId: assignment.securityId 
-      });
-      
-      securityInfo = {
-        securityId: assignment.securityId,
-        watchmanName: watchman ? watchman.name : 'Unknown',
-        status: assignment.status,
-        assignedAt: assignment.assignedAt,
-        confirmedAt: assignment.confirmedAt || null
-      };
-    }
-
-    const orderData = {
-      orderId: order.orderId,
-      customer: order.customer || 'Unknown Customer',
-      items: order.items || [],
-      total: order.total || 0,
-      status: order.status,
-      createdAt: order.createdAt,
-      securityInfo
-    };
-
-    res.json({ success: true, order: orderData });
+    res.json({ success: true, workLog });
   } catch (error) {
-    console.error('Error fetching order:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch order' });
+    console.error('Error fetching work log:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch work log' });
   }
 });
 
-// Assign order to security (called when order is completed)
+// Assign Order to Security (called when order is completed)
 app.post('/api/security/assign', checkDB, async (req, res) => {
   try {
     const { orderId, customerName, items, totalAmount } = req.body;
-    
-    if (!orderId) {
-      return res.status(400).json({ success: false, error: 'Order ID required' });
-    }
+    if (!orderId) return res.status(400).json({ success: false, error: 'Order ID required' });
 
-    // Get available watchmen
-    const watchmen = await db.collection('security_watchmen')
-      .find({ status: 'active' })
-      .sort({ securityId: 1 })
-      .toArray();
-    
-    if (watchmen.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'No active security watchmen available' 
-      });
-    }
+    const watchmen = await db.collection('security_watchmen').find({ status: 'active' }).sort({ securityId: 1 }).toArray();
+    if (watchmen.length === 0) return res.status(404).json({ success: false, error: 'No active watchmen' });
 
-    // Simple round-robin assignment (you can implement more sophisticated logic)
-    const assignments = await db.collection('security_assignments')
-      .find({})
-      .sort({ assignedAt: -1 })
-      .limit(1)
-      .toArray();
-    
-    let nextWatchmanIndex = 0;
+    // Simple round-robin assignment
+    const assignments = await db.collection('security_assignments').find({}).sort({ assignedAt: -1 }).limit(1).toArray();
+    let nextIndex = 0;
     if (assignments.length > 0) {
-      const lastAssignedSecurityId = assignments[0].securityId;
-      const lastIndex = watchmen.findIndex(w => w.securityId === lastAssignedSecurityId);
-      nextWatchmanIndex = (lastIndex + 1) % watchmen.length;
+      const lastIndex = watchmen.findIndex(w => w.securityId === assignments[0].securityId);
+      nextIndex = (lastIndex + 1) % watchmen.length;
     }
 
-    const assignedWatchman = watchmen[nextWatchmanIndex];
-
-    // Create assignment
+    const assignedWatchman = watchmen[nextIndex];
     const assignment = {
-      orderId,
-      securityId: assignedWatchman.securityId,
-      watchmanName: assignedWatchman.name,
-      customerName: customerName || 'Unknown Customer',
-      items: items || [],
-      totalAmount: totalAmount || 0,
-      status: 'assigned',
-      assignedAt: new Date(),
-      createdAt: new Date()
+      orderId, securityId: assignedWatchman.securityId, watchmanName: assignedWatchman.name,
+      customerName: customerName || 'Unknown', items: items || [], totalAmount: totalAmount || 0,
+      status: 'assigned', assignedAt: new Date()
     };
 
     await db.collection('security_assignments').insertOne(assignment);
-    await updateSecurityStats(assignedWatchman.securityId, 'assigned');
+    await db.collection('security_stats').updateOne(
+      { securityId: assignedWatchman.securityId },
+      { $inc: { totalAssigned: 1 }, $set: { lastUpdated: new Date() }},
+      { upsert: true }
+    );
 
-    res.json({ 
-      success: true, 
-      message: 'Order assigned to security',
-      assignedTo: {
-        securityId: assignedWatchman.securityId,
-        name: assignedWatchman.name
-      }
-    });
+    res.json({ success: true, assignedTo: { securityId: assignedWatchman.securityId, name: assignedWatchman.name }});
   } catch (error) {
     console.error('Error assigning order:', error);
     res.status(500).json({ success: false, error: 'Failed to assign order' });
   }
 });
 
-// Helper function to reassign expired orders
-async function reassignOrder(orderId, currentSecurityId) {
+// Get All Watchmen Performance Report
+app.get('/api/security/report', checkDB, async (req, res) => {
   try {
-    const watchmen = await db.collection('security_watchmen')
-      .find({ 
-        status: 'active',
-        securityId: { $ne: currentSecurityId }
-      })
-      .toArray();
-    
-    if (watchmen.length === 0) {
-      console.log('No other watchmen available for reassignment');
-      return;
+    const watchmen = await db.collection('security_watchmen').find({ status: 'active' }).sort({ securityId: 1 }).toArray();
+    const report = [];
+
+    for (const watchman of watchmen) {
+      const stats = await db.collection('security_stats').findOne({ securityId: watchman.securityId }) || 
+        { totalAssigned: 0, totalConfirmed: 0, totalPending: 0, efficiency: 0 };
+      
+      const today = new Date().toISOString().split('T')[0];
+      const todayWork = await db.collection('security_worklog').countDocuments({ 
+        securityId: watchman.securityId, date: today 
+      });
+
+      const todayEarnings = await db.collection('security_worklog').aggregate([
+        { $match: { securityId: watchman.securityId, date: today }},
+        { $group: { _id: null, total: { $sum: '$amount' }}}
+      ]).toArray();
+
+      report.push({
+        securityId: watchman.securityId,
+        name: watchman.name,
+        contact: watchman.contact,
+        registeredAt: watchman.registeredAt,
+        lastLogin: watchman.lastLogin,
+        stats: {
+          ...stats,
+          todayWork,
+          todayEarnings: todayEarnings[0]?.total || 0
+        }
+      });
     }
 
-    // Assign to next available watchman
-    const nextWatchman = watchmen[0];
-    
-    const newAssignment = {
-      orderId,
-      securityId: nextWatchman.securityId,
-      watchmanName: nextWatchman.name,
-      status: 'assigned',
-      assignedAt: new Date(),
-      reassignedFrom: currentSecurityId,
-      createdAt: new Date()
-    };
-
-    await db.collection('security_assignments').insertOne(newAssignment);
-    await updateSecurityStats(nextWatchman.securityId, 'assigned');
-    
-    console.log(`Order ${orderId} reassigned from ${currentSecurityId} to ${nextWatchman.securityId}`);
+    res.json({ success: true, report });
   } catch (error) {
-    console.error('Error reassigning order:', error);
+    console.error('Error generating report:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate report' });
   }
-}
+});
 
-// Helper function to update security stats
-async function updateSecurityStats(securityId, action) {
+// Cleanup expired assignments
+setInterval(async () => {
   try {
-    const updateData = { lastUpdated: new Date() };
-    
-    switch (action) {
-      case 'assigned':
-        updateData.$inc = { totalAssigned: 1 };
-        break;
-      case 'confirmed':
-        updateData.$inc = { totalConfirmed: 1 };
-        break;
-      case 'expired':
-        updateData.$inc = { totalExpired: 1 };
-        break;
-    }
-
-    await db.collection('security_stats').updateOne(
-      { securityId },
-      updateData,
-      { upsert: true }
-    );
-  } catch (error) {
-    console.error('Error updating security stats:', error);
-  }
-}
-
-// Cleanup expired assignments (run periodically)
-async function cleanupExpiredAssignments() {
-  try {
+    if (!db) return;
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const expired = await db.collection('security_assignments')
+      .find({ status: 'assigned', assignedAt: { $lt: fiveMinutesAgo }}).toArray();
     
-    const expiredAssignments = await db.collection('security_assignments')
-      .find({ 
-        status: 'assigned',
-        assignedAt: { $lt: fiveMinutesAgo }
-      })
-      .toArray();
-
-    for (const assignment of expiredAssignments) {
+    for (const assignment of expired) {
       await db.collection('security_assignments').updateOne(
         { _id: assignment._id },
-        { 
-          $set: { 
-            status: 'expired',
-            expiredAt: new Date()
-          } 
-        }
+        { $set: { status: 'expired', expiredAt: new Date() }}
       );
-      
-      await updateSecurityStats(assignment.securityId, 'expired');
-      await reassignOrder(assignment.orderId, assignment.securityId);
     }
-
-    if (expiredAssignments.length > 0) {
-      console.log(`Cleaned up ${expiredAssignments.length} expired assignments`);
-    }
+    if (expired.length > 0) console.log(`Expired ${expired.length} assignments`);
   } catch (error) {
-    console.error('Error cleaning up expired assignments:', error);
+    console.error('Cleanup error:', error);
   }
-}
+}, 60000);
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({ 
-    success: false, 
-    error: 'Internal server error' 
-  });
-});
-
-// Start server
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  try { 
-    await connectDB();
-    
-    // Set up periodic cleanup of expired assignments
-    setInterval(cleanupExpiredAssignments, 60000); // Every minute
-    
-  } catch (error) { 
-    console.error('Initial database connection failed:', error); 
-  }
+  try { await connectDB(); } catch (error) { console.error('DB connection failed:', error); }
 });
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('Shutting down server...');
-  if (mongoClient) {
-    await mongoClient.close();
-  }
+  console.log('Shutting down...');
+  if (mongoClient) await mongoClient.close();
   process.exit(0);
 });
